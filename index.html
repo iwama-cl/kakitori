@@ -75,6 +75,13 @@ h1{font-family:var(--f-title);font-size:28px;margin:0;letter-spacing:.08em}
 .kword .blank span{font-family:var(--f-ui);font-size:18px}
 .kword .blank.done span{font-family:var(--f-kyokasho);font-size:32px}
 .kread{font-size:17px;color:var(--muted);letter-spacing:.08em}
+.ksent{font-size:21px;line-height:2.2}
+.kw-in{font-family:var(--f-kyokasho);font-size:24px;letter-spacing:.04em}
+.kw-in .blank{min-width:1.1em;text-align:center}
+.kw-in .blank span{font-family:var(--f-ui);font-size:16px}
+.kw-in .blank.done span{font-family:var(--f-kyokasho);font-size:24px}
+.kr-in{font-size:13px;color:var(--muted);margin:0 2px;white-space:nowrap}
+.kr-in::before{content:"（"}.kr-in::after{content:"）"}
 .kread::before{content:"（"}.kread::after{content:"）"}
 .padzone{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;min-height:0;padding-block:6px}
 .padwrap{position:relative;touch-action:none}
@@ -369,11 +376,14 @@ function question(){
   $("count").textContent=(mode==="test"?"テスト ":"")+`${Math.min(idx+1,total)}/${total}`+(queue[idx].retry?"　再出題":"");
   const item=queue[idx];
   if(q.k){ // 熟語の1字を書く。出す熟語は毎回ランダム
-    if(!item.v)item.v=q.vs[Math.random()*q.vs.length|0];
+    // 例文つきの熟語で出す。まちがえて再出題するときだけ、別の熟語にして変化をつける
+    if(!item.v){const ws=q.vs.filter(v=>v[2]);item.v=(item.retry||!ws.length)?q.vs[Math.random()*q.vs.length|0]:ws[0]}
     item.s=item.v[0];item.r=item.v[1];
     $("qcat").textContent=LVNAME[q.lv]||"常用漢字";
     const [pre,post]=item.s.split("＿");
-    $("sentence").innerHTML=`<span class="kword">${pre}<span class="blank" id="blank"><span>？</span></span>${post}</span><span class="kread">${item.r}</span>`;
+    const word=`<span class="kw-in">${pre}<span class="blank" id="blank"><span>？</span></span>${post}</span><span class="kr-in">${item.r}</span>`;
+    if(item.v[2]){const m=item.v[2].match(/^(.*)\{[^}]*\}(.*)$/);$("sentence").innerHTML=`<span class="ksent">${m[1]}${word}${m[2]}</span>`}
+    else $("sentence").innerHTML=`<span class="kword">${pre}<span class="blank" id="blank"><span>？</span></span>${post}</span><span class="kread">${item.r}</span>`;
   }else{
     item.s=q.s;item.r=q.r;
     $("qcat").textContent=CATS[q.c];

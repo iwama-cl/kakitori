@@ -25,7 +25,8 @@
 - 漢検の級別：`kanji_words.js`。常用漢字2,136字のうち熟語が見つかった2,131字。
   KANJIDIC2 の学年から級を決め（小1=10級 … 小6=5級、中学以上=4〜2級）、JMdict の頻出語から熟語と読みを選んでいます。
   同じ読み・同じ形で別の字が入る熟語は、答えが割れるので除いています。
-  `tools/build_kanji_words.py` で作り直せます（KANJIDIC2 / JMdict: EDRDG, CC BY-SA 4.0）。
+  各字に1つ、例文（`tools/sentences/*.txt`、形式は `漢字|熟語|読み|例文`）があり、出題は例文で行います。
+  例文を直したら `python3 tools/check_sentences.py` で確認し、`tools/build_kanji_words.py` で作り直せます（KANJIDIC2 / JMdict: EDRDG, CC BY-SA 4.0）。
 
 ## 書き順データ
 `strokes.js` は KanjiVG（https://kanjivg.tagaini.net, Ulrich Apel, CC BY-SA 3.0）から

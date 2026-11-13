@@ -25,6 +25,7 @@ jm = ET.parse(gzip.open(os.path.join(T, "JMdict_e.gz"))).getroot()
 BAD_K = {"&ateji;", "ateji", "iK", "ik", "oK", "rK", "sK", "word containing irregular kanji usage", "word containing out-dated kanji or kanji usage",
          "rarely used kanji form", "search-only kanji form", "irregular okurigana usage", "word containing irregular kana usage"}
 words = []  # (keb, reb, score)
+readings = collections.defaultdict(set)  # 表記 → 読み（例文の読みチェック用）
 for e in jm.iter('entry'):
     rels = [(r.findtext('reb'), [p.text for p in r.findall('re_pri')], [x.text for x in r.findall('re_restr')], r.find('re_nokanji') is not None) for r in e.findall('r_ele')]
     # 古語・俗語などは除く
@@ -36,6 +37,8 @@ for e in jm.iter('entry'):
     for k in e.findall('k_ele'):
         keb = k.findtext('keb'); pri = [p.text for p in k.findall('ke_pri')]
         inf = {i.text for i in k.findall('ke_inf')}
+        for rb, rp, restr, nok in rels:
+            if not nok and (not restr or keb in restr): readings[keb].add(kata2hira(rb))
         if inf & BAD_K: continue
         if not all(is_kanji(c) or 'ぁ' <= c <= 'ゟ' for c in keb): continue  # 漢字とひらがなだけ
         if not any(c in joyo for c in keb): continue
@@ -77,17 +80,36 @@ for keb, reb, sc, hp in sorted(words, key=lambda w: -w[2]):
         by[c].append((sc + bonus, masked, reb, keb))
         seen.add((c, keb))
 
+# 例文（tools/sentences/*.txt: 漢字|熟語|読み|例文）を読み込み、答えが割れないか・読みが辞書と合うかを確かめる
+import glob
+sent, warn = {}, []
+for f in sorted(glob.glob(os.path.join(T, "sentences", "s*.txt"))):
+    for line in open(f, encoding="utf-8"):
+        p = line.rstrip("\n").split("|")
+        if len(p) != 4: continue
+        k, w, r, t = p
+        i = w.index(k); masked = w[:i] + "＿" + w[i + 1:]
+        others = pattern.get((masked, r), set()) - {k}
+        # 熟語だけでは割れても、例文の文脈で決まるので採用する（確認用に表示だけする）
+        if others: warn.append(f"熟語だけだと割れる（例文で判別） {k}:{w}({r}) ほかに {''.join(sorted(others))}")
+        if w in readings and r not in readings[w]: warn.append(f"読みが辞書と違う {k}:{w}({r}) 辞書:{'/'.join(sorted(readings[w]))}")
+        sent[k] = [masked, r, t.replace(w, "{" + masked + "}", 1)]
+for x in warn: print("!", x)
+
 out, missing = [], []
 for c, gr in joyo.items():
     allc = sorted(by.get(c, []), key=lambda x: -x[0])
     good = [x for x in allc if x[0] > -50]
     cand = (good or allc[:2])[:MAXW]
-    if not cand: missing.append(c); continue
-    out.append([c, LEVEL[gr], [[m, r] for _, m, r, _ in cand]])
+    vs = [[m, r] for _, m, r, _ in cand]
+    if c in sent:  # 例文つきの熟語を先頭に（同じ熟語が候補にあれば置き換える）
+        vs = [sent[c]] + [v for v in vs if v[0] != sent[c][0]]
+    if not vs: missing.append(c); continue
+    out.append([c, LEVEL[gr], vs[:MAXW]])
 with open(os.path.join(ROOT, "kanji_words.js"), "w", encoding="utf-8") as f:
     f.write("// 常用漢字の出題データ。KANJIDIC2 / JMdict (EDRDG, CC BY-SA 4.0) から tools/build_kanji_words.py で自動生成\n")
-    f.write("// [漢字, 漢検の級, [[熟語(対象字を＿), 読み], ...]]\n")
+    f.write("// [漢字, 漢検の級, [[熟語(対象字を＿), 読み, 例文({熟語}の位置)?], ...]]  例文は tools/sentences/ に手書き\n")
     f.write("window.KAKITORI_KANJI=" + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n")
-print("kanji with words:", len(out), "missing:", len(missing), "".join(missing))
+print("kanji with words:", len(out), "with sentence:", sum(1 for x in out if len(x[2][0]) > 2), "missing:", len(missing), "".join(missing))
 print("levels:", collections.Counter(x[1] for x in out))
 print("size:", os.path.getsize(os.path.join(ROOT, "kanji_words.js")))
