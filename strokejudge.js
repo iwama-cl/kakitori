@@ -205,12 +205,23 @@
     return p => [mux + tx + kx * (p[0] - mux), muy + ty + ky * (p[1] - muy) + h * (p[0] - mux)];
   }
 
+  // ---------- お手本データの読み込み ----------
+  // strokes.js: {字: [[部品番号...], "画|画|..."]}。各画20点、座標1つを1文字（90段階）で表す
+  const ALPHA = (() => { let a = ""; for (let c = 35; c < 127; c++) { const ch = String.fromCharCode(c); if (ch !== "\\" && ch !== "|") a += ch; } return a; })();
+  const refCache = {};
+  function loadRef(ch) {
+    if (refCache[ch]) return refCache[ch];
+    const raw = global.KAKITORI_STROKES && global.KAKITORI_STROKES[ch];
+    if (!raw) return null;
+    const s = raw[1].split("|").map(t => { const o = []; for (let i = 0; i + 1 < t.length; i += 2) o.push([ALPHA.indexOf(t[i]) / 89, ALPHA.indexOf(t[i + 1]) / 89]); return resample(o); });
+    return (refCache[ch] = { c: raw[0], s });
+  }
+
   // ---------- 判定本体 ----------
   function judgeChar(ch, rawStrokes) {
-    const data = global.KAKITORI_STROKES && global.KAKITORI_STROKES[ch];
+    const data = loadRef(ch);
     if (!data) return null; // データにない字 → 呼び出し側で旧方式へ
-    const ref = data.s.map(f => { const o = []; for (let i = 0; i < f.length; i += 2) o.push([f[i], f[i + 1]]); return o; });
-    const comp = data.c;
+    const ref = data.s, comp = data.c;
     const strokesIn = rawStrokes.filter(s => s.length);
     if (!strokesIn.length) return { grade: 0, empty: true, missingCell: [], extraCell: [], nMissing: ref.length, nExtra: 0, nOdd: 0, refCount: ref.length, userCount: 0 };
 

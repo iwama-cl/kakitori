@@ -70,6 +70,12 @@ h1{font-family:var(--f-title);font-size:28px;margin:0;letter-spacing:.08em}
 .blank{display:inline-block;border-bottom:2px solid var(--shu);padding:0 6px;margin:0 2px;line-height:1.4}
 .blank span{font-size:15px;color:var(--shu);letter-spacing:.08em}
 .blank.done span{font-family:var(--f-kyokasho);font-size:21px;color:var(--ink);letter-spacing:0}
+.kword{font-family:var(--f-kyokasho);font-size:32px;letter-spacing:.06em;margin-right:12px}
+.kword .blank{min-width:1.1em;text-align:center}
+.kword .blank span{font-family:var(--f-ui);font-size:18px}
+.kword .blank.done span{font-family:var(--f-kyokasho);font-size:32px}
+.kread{font-size:17px;color:var(--muted);letter-spacing:.08em}
+.kread::before{content:"（"}.kread::after{content:"）"}
 .padzone{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;min-height:0;padding-block:6px}
 .padwrap{position:relative;touch-action:none}
 .cells,.trace{display:grid}
@@ -125,19 +131,21 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
   <!-- HOME -->
   <section class="screen" id="home">
     <div class="brand"><h1>書き取り帳</h1><small>読めるのに書けない字を</small></div>
-    <p class="lead">文中の空欄を指やペンで書いて「判定する」。線の抜けや余分を自動でチェックします。書けなかった字ほど早めにまた出てきます。</p>
+    <p class="lead">空欄の字を指やペンで書いて「判定する」。線の抜けや余分を自動でチェックします。書けなかった字ほど早めにまた出てきます。</p>
     <div class="stats">
       <div class="stat"><b id="sMaster">0</b><span>覚えた</span></div>
       <div class="stat"><b id="sLearn">0</b><span>学習中</span></div>
       <div class="stat"><b id="sNew">0</b><span>未出題</span></div>
     </div>
     <p class="due">今日の復習　<b id="sDue">0</b> 語</p>
-    <div class="label">ジャンル</div>
+    <div class="label">実用編（例文で書く）</div>
     <div class="chips" id="chips"></div>
-    <div class="sample"><p>例：「添付ファイルをご確認ください」の「てんぷ」を書く → 判定すると、抜けている所が朱色、余分な所が黄土色で出ます。判定がおかしいと思ったら、○△× は自分で選び直せます。</p></div>
+    <div class="label">漢検の級別（熟語の1字を書く・常用漢字2,131字）</div>
+    <div class="chips" id="chipsK"></div>
+    <div class="sample"><p>実用編：「＿ファイルをご確認ください」の「てんぷ」を書く。<br>級別：「＿燥（かんそう）」の空欄に入る1字を書く。<br>判定がおかしいと思ったら、○△× は自分で選び直せます。</p></div>
     <div class="spacer"></div>
     <button class="primary" id="start">10問はじめる</button>
-    <p class="note">記録はこの端末のブラウザに残ります<br>書き順データ：<a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener" style="color:inherit">KanjiVG</a>（CC BY-SA 3.0）</p>
+    <p class="note">記録はこの端末のブラウザに残ります<br>書き順データ：<a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener" style="color:inherit">KanjiVG</a>（CC BY-SA 3.0）<br>漢字・熟語データ：<a href="https://www.edrdg.org/" target="_blank" rel="noopener" style="color:inherit">KANJIDIC2 / JMdict（EDRDG）</a>（CC BY-SA 4.0）</p>
   </section>
 
   <!-- DRILL -->
@@ -186,6 +194,7 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
   </section>
 </div>
 
+<script src="kanji_words.js"></script>
 <script src="strokes.js"></script>
 <script src="strokejudge.js"></script>
 <script src="judge.js"></script>
@@ -228,8 +237,16 @@ const W = [
  ["form","ご＿お祝い","けっこん","結婚"],["form","ご＿お祝い","しゅっさん","出産"],
  ["form","ご＿お祝い","にゅうがく","入学"],["form","ご＿をお祈りします","たこう","多幸"],
 ];
+// 実用編（例文つき）と、漢検の級別（常用漢字の熟語から1字を書く）
 const CATS={all:"すべて",work:"仕事",life:"暮らし",form:"手紙・冠婚葬祭"};
-const WORDS=W.map((w,i)=>({id:w[3],c:w[0],s:w[1],r:w[2],a:w[3]}));
+const LEVELS=[["10","10級"],["9","9級"],["8","8級"],["7","7級"],["6","6級"],["5","5級"],["4-2","4〜2級"],["all","常用すべて"]];
+const LVNAME={"10":"漢検10級（小1）","9":"漢検9級（小2）","8":"漢検8級（小3）","7":"漢検7級（小4）","6":"漢検6級（小5）","5":"漢検5級（小6）","4-2":"漢検4〜2級（中学以上）"};
+const WORDS=W.map((w,i)=>({id:w[3],c:w[0],s:w[1],r:w[2],a:w[3]}))
+  .concat((window.KAKITORI_KANJI||[]).map(([k,lv,vs])=>({id:"k:"+k,k:true,lv,a:k,vs})));
+function inCat(w,c){
+  if(c.startsWith("k:"))return w.k&&(c==="k:all"||w.lv===c.slice(2));
+  return !w.k&&(c==="all"||w.c===c);
+}
 const DAY=86400000, INTV=[0,1,3,7,14,30];
 const KEY="kakitori.v1";
 let db={}; try{db=JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){db={}}
@@ -241,17 +258,18 @@ function show(id){["home","drill","result"].forEach(s=>$(s).hidden=s!==id)}
 
 function homeRender(){
   const now=Date.now(); let m=0,l=0,n=0,d=0;
-  WORDS.forEach(w=>{const r=db[w.id]; if(!r)n++; else{ r.box>=3?m++:l++; if(r.due<=now)d++; }});
+  WORDS.filter(w=>inCat(w,cat)).forEach(w=>{const r=db[w.id]; if(!r)n++; else{ r.box>=3?m++:l++; if(r.due<=now)d++; }});
   $("sMaster").textContent=m;$("sLearn").textContent=l;$("sNew").textContent=n;$("sDue").textContent=d;
   $("chips").innerHTML=Object.entries(CATS).map(([k,v])=>`<button class="chip" data-c="${k}" aria-pressed="${k===cat}">${v}</button>`).join("");
+  $("chipsK").innerHTML=LEVELS.map(([k,v])=>`<button class="chip" data-c="k:${k}" aria-pressed="${"k:"+k===cat}">${v}</button>`).join("");
   show("home");
 }
-$("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;cat=b.dataset.c;try{localStorage.setItem(KEY+".cat",cat)}catch(e){}homeRender()});
+["chips","chipsK"].forEach(id=>$(id).addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;cat=b.dataset.c;try{localStorage.setItem(KEY+".cat",cat)}catch(e){}homeRender()}));
 
 // session
 let queue=[],idx=0,results=[],revealed=false,total=10;
 function buildQueue(){
-  const now=Date.now(), pool=WORDS.filter(w=>cat==="all"||w.c===cat);
+  const now=Date.now(), pool=WORDS.filter(w=>inCat(w,cat));
   const due=pool.filter(w=>db[w.id]&&db[w.id].due<=now).sort((a,b)=>db[a.id].box-db[b.id].box||db[a.id].due-db[b.id].due);
   const fresh=shuffle(pool.filter(w=>!db[w.id]));
   const later=shuffle(pool.filter(w=>db[w.id]&&db[w.id].due>now)).sort((a,b)=>db[a.id].box-db[b.id].box);
@@ -323,9 +341,19 @@ function question(){
   const q=queue[idx].w;revealed=false;strokes=[];overlay=null;nChars=[...q.a].length;
   $("prog").style.width=(Math.min(idx,total)/total*100)+"%";
   $("count").textContent=`${Math.min(idx+1,total)}/${total}`+(queue[idx].retry?"　再出題":"");
-  $("qcat").textContent=CATS[q.c];
-  const [pre,post]=q.s.split("＿");
-  $("sentence").innerHTML=`${pre}<span class="blank" id="blank"><span>${q.r}</span></span>${post}`;
+  const item=queue[idx];
+  if(q.k){ // 熟語の1字を書く。出す熟語は毎回ランダム
+    if(!item.v)item.v=q.vs[Math.random()*q.vs.length|0];
+    item.s=item.v[0];item.r=item.v[1];
+    $("qcat").textContent=LVNAME[q.lv]||"常用漢字";
+    const [pre,post]=item.s.split("＿");
+    $("sentence").innerHTML=`<span class="kword">${pre}<span class="blank" id="blank"><span>？</span></span>${post}</span><span class="kread">${item.r}</span>`;
+  }else{
+    item.s=q.s;item.r=q.r;
+    $("qcat").textContent=CATS[q.c];
+    const [pre,post]=q.s.split("＿");
+    $("sentence").innerHTML=`${pre}<span class="blank" id="blank"><span>${q.r}</span></span>${post}`;
+  }
   $("answer").classList.add("hidden");
   $("trace").classList.remove("on");$("traceBtn").hidden=true;$("traceBtn").textContent="なぞる";
   $("reveal").hidden=false;$("grades").hidden=true;$("verdict").classList.add("hidden");$("copyBtn").hidden=true;$("copyBtn").textContent="データをコピー";
@@ -402,7 +430,7 @@ $("grades").addEventListener("click",e=>{
     if(g===2){r.box=Math.min(5,r.box+1);r.due=now+INTV[r.box]*DAY}
     else if(g===1){r.box=Math.max(1,r.box);r.due=now+DAY}
     else{r.box=0;r.due=now}
-    db[id]=r;save();results.push({w:item.w,g});
+    db[id]=r;save();results.push({w:item.w,g,s:item.s,rd:item.r});
     if(g===0)queue.push({w:item.w,retry:true});
   }
   idx++; idx<queue.length?question():finish();
@@ -411,7 +439,7 @@ function finish(){
   const ok=results.filter(r=>r.g===2).length;
   $("score").textContent=`${ok}/${results.length}`;
   const mk=["×","△","○"],col=["var(--muted)","var(--amber)","var(--shu)"];
-  $("reslist").innerHTML=results.map(r=>`<li><span class="mk" style="color:${col[r.g]}">${mk[r.g]}</span><span class="w">${r.w.a}</span><span class="r">${r.w.r}</span></li>`).join("");
+  $("reslist").innerHTML=results.map(r=>`<li><span class="mk" style="color:${col[r.g]}">${mk[r.g]}</span><span class="w">${r.w.k?r.s.replace("＿",r.w.a):r.w.a}</span><span class="r">${r.rd}</span></li>`).join("");
   show("result");
 }
 homeRender();

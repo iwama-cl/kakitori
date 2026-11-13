@@ -7,11 +7,20 @@ import gzip, re, json, math, os, xml.etree.ElementTree as ET
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "tools", "kanjivg-20260714.xml.gz")
 N = 20  # 1画あたりの点の数
+# 座標は 0〜1 を90段階にして、1文字の記号で表す（\ と | を除いた ASCII 35〜126）
+ALPHA = "".join(chr(c) for c in range(35, 127) if chr(c) not in "\\|")
+assert len(ALPHA) == 90
+def enc(v): return ALPHA[max(0, min(89, round(v * 89)))]
 
 def words_kanji():
     s = open(os.path.join(ROOT, "index.html"), encoding="utf-8").read()
     a = s.index("const W = ["); b = s.index("];", a)
-    return sorted({c for m in re.findall(r'"([^"]+)"\]', s[a:b]) for c in m if '㐀' <= c <= '鿿'})
+    chars = {c for m in re.findall(r'"([^"]+)"\]', s[a:b]) for c in m if '\u3400' <= c <= '\u9fff'}
+    kw = os.path.join(ROOT, "kanji_words.js")  # 常用漢字モードの出題字
+    if os.path.exists(kw):
+        t = open(kw, encoding="utf-8").read()
+        chars |= {x[0] for x in json.loads(t[t.index("=") + 1:t.rindex(";")])}
+    return sorted(chars)
 
 def parse_path(d):
     toks = re.findall(r'[MmCcSsLlZzHhVv]|-?\d*\.?\d+(?:e-?\d+)?', d)
@@ -68,8 +77,8 @@ def main():
     data = {}
     for kj in root.iter('kanji'):
         cid = kj.get('id', '')
-        if not re.match(r'kvg:kanji_[0-9a-f]{5}$', cid): continue
-        ch = chr(int(cid[-5:], 16))
+        if not re.match(r'kvg:kanji_[0-9a-f]{5,6}$', cid): continue
+        ch = chr(int(cid.split('_')[1], 16))
         if ch not in want: continue
         top = kj.find('g')
         comps = [c for c in top if c.tag == 'g'] or [top]
@@ -93,11 +102,12 @@ def main():
         for s in strokes:
             if s[0] in seen: continue
             seen.add(s[0]); uniq.append(s)
-        data[ch] = {"c": [s[1] for s in uniq], "s": [[round(v / 109, 3) for p in s[2] for v in p] for s in uniq]}
+        data[ch] = [[s[1] for s in uniq], "|".join("".join(enc(v / 109) for p in s[2] for v in p) for s in uniq)]
     missing = sorted(want - set(data))
     with open(out, "w", encoding="utf-8") as f:
         f.write("// 書き順データ: KanjiVG (https://kanjivg.tagaini.net) by Ulrich Apel, CC BY-SA 3.0\n")
         f.write("// tools/build_strokes.py で自動生成。直接編集しない\n")
+        f.write("// 形式: {字: [[部品番号...], \"画|画|...\"]}  各画は20点、座標1つを1文字で表す\n")
         f.write("window.KAKITORI_STROKES=" + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n")
     print(len(data), "kanji;", "missing:", "".join(missing) or "none", ";", os.path.getsize(out), "bytes")
 
