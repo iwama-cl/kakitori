@@ -1,6 +1,6 @@
 // 書き取り帳 オフライン用。更新したら VERSION を上げる
-const VERSION = "kakitori-v1";
-const CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png"];
+const VERSION = "kakitori-v2";
+const CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "judge.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
