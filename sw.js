@@ -1,5 +1,5 @@
 // 書き取り帳 オフライン用。更新したら VERSION を上げる
-const VERSION = "kakitori-v9";
+const VERSION = "kakitori-v10";
 const CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "judge.js", "strokes.js", "strokejudge.js", "kanji_words.js"];
 
 self.addEventListener("install", e => {
@@ -15,9 +15,12 @@ self.addEventListener("fetch", e => {
   // 本体：ネット優先（更新をすぐ反映）、つながらなければ保存版
   if (url.origin === location.origin) {
     // GitHub Pages は10分間キャッシュされるので、毎回サーバーに更新を確認する
+    // 公開を止めてサーバーが 404 などを返しても、保存してある版で動き続ける
+    const fromCache = () => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match("index.html"));
     e.respondWith(fetch(req, { cache: "no-cache" }).then(res => {
+      if (!res.ok) return fromCache().then(r => r || res);
       const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res;
-    }).catch(() => caches.match(req, {ignoreSearch: true}).then(r => r || caches.match("index.html"))));
+    }).catch(fromCache));
     return;
   }
   // Googleフォント：一度読んだら保存版を使う
