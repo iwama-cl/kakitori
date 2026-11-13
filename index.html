@@ -73,16 +73,18 @@ h1{font-family:var(--f-title);font-size:28px;margin:0;letter-spacing:.08em}
 .padzone{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;min-height:0;padding-block:6px}
 .padwrap{position:relative;touch-action:none}
 .cells,.trace{display:grid}
-.cells{border-top:1.5px solid var(--grid);border-left:1.5px solid var(--grid)}
-.cell{border-right:1.5px solid var(--grid);border-bottom:1.5px solid var(--grid);position:relative;background:var(--surface)}
+.cell{outline:1.5px solid var(--grid);outline-offset:-.75px;position:relative;background:var(--surface)}
+.cell.off{outline:0;background:none}
+.cell.off::before,.cell.off::after{display:none}
+.cell .num{position:absolute;left:6px;top:3px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;pointer-events:none}
 .answer{display:flex;align-items:center;gap:10px;min-height:44px}
 .cell::before,.cell::after{content:"";position:absolute;border:0 dashed var(--grid-soft)}
 .cell::before{left:50%;top:0;bottom:0;border-left-width:1px}
 .cell::after{top:50%;left:0;right:0;border-top-width:1px}
-.trace{position:absolute;top:1.5px;left:1.5px;pointer-events:none;opacity:0;transition:opacity .2s}
+.trace{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .2s}
 .trace.on{opacity:.2}
 .trace span{display:grid;place-items:center;font-family:var(--f-kyokasho);line-height:1}
-canvas{position:absolute;top:1.5px;left:1.5px;touch-action:none}
+canvas{position:absolute;top:0;left:0;touch-action:none}
 .answer b{font-family:var(--f-kyokasho);font-weight:600;font-size:36px;line-height:1;color:var(--ink);letter-spacing:.06em}
 .answer small{font-size:11px;letter-spacing:.12em;color:var(--muted)}
 .answer.hidden{visibility:hidden}
@@ -271,7 +273,10 @@ function layoutPad(){
   cellPx=best.cell; gridCols=best.cols; padW=cellPx*best.cols; padH=cellPx*best.rows;
   const grid=`repeat(${best.cols},${cellPx}px)`;
   $("cells").style.gridTemplateColumns=grid; $("trace").style.gridTemplateColumns=grid;
-  $("cells").innerHTML=Array.from({length:best.cols*best.rows},()=>`<div class="cell" style="height:${cellPx}px"></div>`).join("");
+  // 使わないマスは描かない。字が2文字以上なら書く順番の番号を付ける
+  $("cells").innerHTML=Array.from({length:best.cols*best.rows},(_,i)=>i<nChars
+    ?`<div class="cell" style="height:${cellPx}px">${nChars>1?`<span class="num">${i+1}</span>`:""}</div>`
+    :`<div class="cell off" style="height:${cellPx}px"></div>`).join("");
   const fs=`font-size:${Math.round(cellPx*.78)}px;width:${cellPx}px;height:${cellPx}px`;
   $("trace").innerHTML=[...queue[idx].w.a].map(ch=>`<span style="${fs}">${ch}</span>`).join("");
   $("ansText").textContent=queue[idx].w.a;
@@ -317,20 +322,39 @@ function question(){
   requestAnimationFrame(layoutPad);
 }
 // 書いた線をマスごとに分けて、1文字ずつ判定する
+// 書いた線をマスごとに分けて判定する。
+// どのマスにどの字を書いても（縦書きの順でも）、一番よく合う組み合わせで判定する。
 function judgeWord(word){
-  const chars=[...word], per=chars.map(()=>[]);
+  const chars=[...word], nCells=gridCols*Math.ceil(padH/cellPx), per=Array.from({length:nCells},()=>[]);
   strokes.forEach(s=>{
     if(!s.length)return;let cx=0,cy=0;s.forEach(p=>{cx+=p[0];cy+=p[1]});cx=cx/s.length*padW;cy=cy/s.length*padH;
-    const col=Math.min(gridCols-1,Math.max(0,Math.floor(cx/cellPx))),row=Math.max(0,Math.floor(cy/cellPx)),i=row*gridCols+col;
-    if(i<chars.length)per[i].push(s.map(p=>[(p[0]*padW-col*cellPx)/cellPx,(p[1]*padH-row*cellPx)/cellPx]));
+    const col=Math.min(gridCols-1,Math.max(0,Math.floor(cx/cellPx))),row=Math.min(nCells/gridCols-1,Math.max(0,Math.floor(cy/cellPx))),i=row*gridCols+col;
+    per[i].push(s.map(p=>[(p[0]*padW-col*cellPx)/cellPx,(p[1]*padH-row*cellPx)/cellPx]));
   });
+  const used=per.map((p,i)=>i).filter(i=>per[i].length);
+  const cache={},J=(ci,k)=>cache[ci+","+k]||(cache[ci+","+k]=KakitoriJudge.judgeChar(chars[ci],per[k]));
+  const score=r=>r.grade*10+r.cov+r.prec;
+  // まずは素直に「1番のマスに1文字目…」で判定。全部○ならそれで決まり
+  let assign=chars.map((_,i)=>i);
+  if(!assign.every((k,ci)=>J(ci,k).grade===2) && used.length>=1 && used.length<=5){
+    const cand=used.length>=chars.length?used:used.concat(chars.map((_,i)=>i).filter(i=>!used.includes(i)));
+    let best=null;
+    const perm=(rest,acc)=>{
+      if(acc.length===chars.length){const t=acc.reduce((s,k,ci)=>s+score(J(ci,k)),0);if(!best||t>best.t)best={t,a:acc.slice()};return}
+      rest.forEach((k,j)=>perm(rest.filter((_,x)=>x!==j),acc.concat(k)));
+    };
+    perm(cand,[]);if(best)assign=best.a;
+  }
   const miss=[],extra=[];let grade=2,nM=0,nE=0,empty=0;
-  chars.forEach((ch,i)=>{
-    const r=KakitoriJudge.judgeChar(ch,per[i]);
-    const col=i%gridCols,row=Math.floor(i/gridCols),toPx=([x,y])=>[(col+x)*cellPx,(row+y)*cellPx];
+  assign.forEach((k,ci)=>{
+    const r=J(ci,k);
+    const col=k%gridCols,row=Math.floor(k/gridCols),toPx=([x,y])=>[(col+x)*cellPx,(row+y)*cellPx];
     r.missingCell.forEach(p=>miss.push(toPx(p)));r.extraCell.forEach(p=>extra.push(toPx(p)));
     grade=Math.min(grade,r.grade);nM+=r.nMissing;nE+=r.nExtra;if(r.empty)empty++;
   });
+  // どの字にも使われなかったマスに書いた線は「余分」扱い
+  const stray=used.filter(k=>!assign.includes(k));
+  if(stray.length){grade=Math.min(grade,1);nE+=stray.length;stray.forEach(k=>{const col=k%gridCols,row=Math.floor(k/gridCols);per[k].forEach(s=>s.forEach(([x,y])=>extra.push([(col+x)*cellPx,(row+y)*cellPx])))})}
   return {grade,miss,extra,nM,nE,empty,n:chars.length};
 }
 function verdictText(j){
@@ -341,14 +365,18 @@ function verdictText(j){
   return `<b class="v${j.grade}">${j.grade?"△":"×"}</b>${parts.join("　")||"形がだいぶ違うかも"}`;
 }
 $("reveal").onclick=()=>{
-  revealed=true;const q=queue[idx].w;
-  let j;try{j=judgeWord(q.a)}catch(err){j=null}
+  if(revealed)return;revealed=true;$("reveal").textContent="判定中…";
+  setTimeout(doReveal,30); // 表示を先に更新してから重い判定を走らせる
+};
+function doReveal(){
+  const q=queue[idx].w;
+  let j;try{j=judgeWord(q.a)}catch(err){console.error(err);j=null}
   if(j){overlay={miss:j.miss,extra:j.extra};redraw();$("verdict").innerHTML=verdictText(j);$("verdict").classList.remove("hidden");
     document.querySelector(`.grade[data-g="${j.grade}"]`).classList.add("suggest");}
   $("answer").classList.remove("hidden");$("traceBtn").hidden=false;
   const b=$("blank");b.classList.add("done");b.firstElementChild.textContent=q.a;
-  $("reveal").hidden=true;$("grades").hidden=false;
-};
+  $("reveal").hidden=true;$("grades").hidden=false;$("reveal").textContent="判定する";
+}
 $("grades").addEventListener("click",e=>{
   const b=e.target.closest(".grade");if(!b)return;const g=+b.dataset.g,item=queue[idx],id=item.w.id,now=Date.now();
   if(!item.retry){
