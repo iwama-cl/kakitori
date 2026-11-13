@@ -17,17 +17,17 @@
 /* Layout: 原稿用紙ノート。片手で届くよう操作ボタンは下部に集約、書く欄は方眼マス */
 :root{
   --paper:#f4f6f1; --surface:#ffffff; --ink:#1c2430; --muted:#6c766f;
-  --grid:#8fb39a; --grid-soft:#cfe0d3; --shu:#c9432a; --amber:#b9851c; --line:#dde5df;
+  --grid:#8fb39a; --grid-soft:#cfe0d3; --shu:#c9432a; --amber:#b9851c; --odd:#4f86c6; --line:#dde5df;
   --f-ui:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",sans-serif;
   --f-kyokasho:"Klee One","Hiragino Mincho ProN","Yu Mincho",serif;
   --f-title:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --paper:#131817; --surface:#1b2120; --ink:#e7ebe5; --muted:#8e9992;
-  --grid:#4f7a5d; --grid-soft:#2a3a30; --shu:#ff7b5e; --amber:#e3b04b; --line:#29312e; color-scheme:dark}}
+  --grid:#4f7a5d; --grid-soft:#2a3a30; --shu:#ff7b5e; --amber:#e3b04b; --odd:#7fb0ea; --line:#29312e; color-scheme:dark}}
 :root[data-theme="dark"]{
   --paper:#131817; --surface:#1b2120; --ink:#e7ebe5; --muted:#8e9992;
-  --grid:#4f7a5d; --grid-soft:#2a3a30; --shu:#ff7b5e; --amber:#e3b04b; --line:#29312e; color-scheme:dark}
+  --grid:#4f7a5d; --grid-soft:#2a3a30; --shu:#ff7b5e; --amber:#e3b04b; --odd:#7fb0ea; --line:#29312e; color-scheme:dark}
 html,body{height:100%}
 body{background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.6;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
@@ -95,8 +95,8 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
 .grade.suggest{border-width:2px;border-color:currentColor;background:var(--grid-soft)}
 .g-ok.suggest{color:var(--shu)} .g-mid.suggest{color:var(--amber)} .g-ng.suggest{color:var(--ink)}
 .grade.suggest::after{content:"判定";font-size:10px;letter-spacing:.1em;opacity:.8}
-.tools{display:flex;gap:18px;justify-content:center}
-.tool{font-size:13px;color:var(--muted);padding:6px 8px;border-radius:8px}
+.tools{display:flex;gap:6px;justify-content:center;white-space:nowrap}
+.tool{font-size:13px;color:var(--muted);padding:6px 7px;border-radius:8px}
 .tool:active{background:var(--grid-soft)}
 .actions{display:grid;gap:10px;padding-bottom:4px;min-height:82px;align-content:end}
 .grades{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -137,7 +137,7 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
     <div class="sample"><p>例：「添付ファイルをご確認ください」の「てんぷ」を書く → 判定すると、抜けている所が朱色、余分な所が黄土色で出ます。判定がおかしいと思ったら、○△× は自分で選び直せます。</p></div>
     <div class="spacer"></div>
     <button class="primary" id="start">10問はじめる</button>
-    <p class="note">記録はこの端末のブラウザに残ります</p>
+    <p class="note">記録はこの端末のブラウザに残ります<br>書き順データ：<a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener" style="color:inherit">KanjiVG</a>（CC BY-SA 3.0）</p>
   </section>
 
   <!-- DRILL -->
@@ -158,7 +158,8 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
       <div class="tools">
         <button class="tool" id="undo">↶ 一画戻す</button>
         <button class="tool" id="clear">消す</button>
-        <button class="tool" id="traceBtn" hidden>なぞって練習</button>
+        <button class="tool" id="traceBtn" hidden>なぞる</button>
+        <button class="tool" id="copyBtn" hidden>データをコピー</button>
       </div>
       <div class="answer hidden" id="answer"><small>正解</small><b id="ansText"></b></div>
       <div class="verdict hidden" id="verdict"></div>
@@ -185,6 +186,8 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
   </section>
 </div>
 
+<script src="strokes.js"></script>
+<script src="strokejudge.js"></script>
 <script src="judge.js"></script>
 <script>
 const W = [
@@ -294,6 +297,7 @@ function redraw(){
   if(overlay){ // 判定結果：抜けている所は朱、余計な所は黄土色
     const dot=(pts,color,r)=>{ctx.fillStyle=color;ctx.globalAlpha=.75;pts.forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill()});ctx.globalAlpha=1};
     dot(overlay.miss,cssVar("--shu"),Math.max(2.5,cellPx*.03));
+    dot(overlay.odd||[],cssVar("--odd"),Math.max(2,cellPx*.022));
     dot(overlay.extra,cssVar("--amber"),Math.max(2.5,cellPx*.03));
   }
 }
@@ -305,7 +309,14 @@ cv.addEventListener("pointermove",e=>{if(!cur||e.pointerId!==curId)return;
 ["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,e=>{if(e.pointerId===curId){cur=null;curId=null}}));
 $("undo").onclick=()=>{strokes.pop();overlay=null;redraw()};
 $("clear").onclick=()=>{strokes=[];overlay=null;redraw()};
-$("traceBtn").onclick=()=>{const t=$("trace");const on=!t.classList.contains("on");t.classList.toggle("on",on);$("traceBtn").textContent=on?"なぞり終了":"なぞって練習";strokes=[];overlay=null;redraw()};
+$("traceBtn").onclick=()=>{const t=$("trace");const on=!t.classList.contains("on");t.classList.toggle("on",on);$("traceBtn").textContent=on?"なぞり終了":"なぞる";strokes=[];overlay=null;redraw()};
+// 判定がおかしいときに、書いた線をClaudeに送って調整してもらうためのコピー
+let lastJudge=null;
+$("copyBtn").onclick=()=>{
+  if(!lastJudge)return;const txt="書き取り帳データ "+JSON.stringify(lastJudge);
+  const done=ok=>{$("copyBtn").textContent=ok?"コピーしました":"コピーできませんでした"};
+  try{navigator.clipboard.writeText(txt).then(()=>done(true),()=>done(false))}catch(e){done(false)}
+};
 window.addEventListener("resize",()=>{if(!$("drill").hidden)layoutPad()});
 
 function question(){
@@ -316,14 +327,20 @@ function question(){
   const [pre,post]=q.s.split("＿");
   $("sentence").innerHTML=`${pre}<span class="blank" id="blank"><span>${q.r}</span></span>${post}`;
   $("answer").classList.add("hidden");
-  $("trace").classList.remove("on");$("traceBtn").hidden=true;$("traceBtn").textContent="なぞって練習";
-  $("reveal").hidden=false;$("grades").hidden=true;$("verdict").classList.add("hidden");
+  $("trace").classList.remove("on");$("traceBtn").hidden=true;$("traceBtn").textContent="なぞる";
+  $("reveal").hidden=false;$("grades").hidden=true;$("verdict").classList.add("hidden");$("copyBtn").hidden=true;$("copyBtn").textContent="データをコピー";
   [...document.querySelectorAll(".grade")].forEach(b=>b.classList.remove("suggest"));
   requestAnimationFrame(layoutPad);
 }
 // 書いた線をマスごとに分けて、1文字ずつ判定する
 // 書いた線をマスごとに分けて判定する。
 // どのマスにどの字を書いても（縦書きの順でも）、一番よく合う組み合わせで判定する。
+// 書き順データがある字は1画ずつ比べる方式、ない字は形を重ねる方式
+function judgeOne(ch,strokes){
+  const r=window.KakitoriStrokeJudge&&KakitoriStrokeJudge.judgeChar(ch,strokes);
+  if(r)return r;
+  const o=KakitoriJudge.judgeChar(ch,strokes);o.nOdd=0;o.oddCell=[];return o;
+}
 function judgeWord(word){
   const chars=[...word], nCells=gridCols*Math.ceil(padH/cellPx), per=Array.from({length:nCells},()=>[]);
   strokes.forEach(s=>{
@@ -332,7 +349,7 @@ function judgeWord(word){
     per[i].push(s.map(p=>[(p[0]*padW-col*cellPx)/cellPx,(p[1]*padH-row*cellPx)/cellPx]));
   });
   const used=per.map((p,i)=>i).filter(i=>per[i].length);
-  const cache={},J=(ci,k)=>cache[ci+","+k]||(cache[ci+","+k]=KakitoriJudge.judgeChar(chars[ci],per[k]));
+  const cache={},J=(ci,k)=>cache[ci+","+k]||(cache[ci+","+k]=judgeOne(chars[ci],per[k]));
   const score=r=>r.grade*10+r.cov+r.prec;
   // まずは素直に「1番のマスに1文字目…」で判定。全部○ならそれで決まり
   let assign=chars.map((_,i)=>i);
@@ -345,22 +362,22 @@ function judgeWord(word){
     };
     perm(cand,[]);if(best)assign=best.a;
   }
-  const miss=[],extra=[];let grade=2,nM=0,nE=0,empty=0;
+  const miss=[],extra=[],odd=[];let grade=2,nM=0,nE=0,nO=0,empty=0;
   assign.forEach((k,ci)=>{
     const r=J(ci,k);
     const col=k%gridCols,row=Math.floor(k/gridCols),toPx=([x,y])=>[(col+x)*cellPx,(row+y)*cellPx];
-    r.missingCell.forEach(p=>miss.push(toPx(p)));r.extraCell.forEach(p=>extra.push(toPx(p)));
-    grade=Math.min(grade,r.grade);nM+=r.nMissing;nE+=r.nExtra;if(r.empty)empty++;
+    r.missingCell.forEach(p=>miss.push(toPx(p)));r.extraCell.forEach(p=>extra.push(toPx(p)));(r.oddCell||[]).forEach(p=>odd.push(toPx(p)));
+    grade=Math.min(grade,r.grade);nM+=r.nMissing;nE+=r.nExtra;nO+=r.nOdd||0;if(r.empty)empty++;
   });
   // どの字にも使われなかったマスに書いた線は「余分」扱い
   const stray=used.filter(k=>!assign.includes(k));
   if(stray.length){grade=Math.min(grade,1);nE+=stray.length;stray.forEach(k=>{const col=k%gridCols,row=Math.floor(k/gridCols);per[k].forEach(s=>s.forEach(([x,y])=>extra.push([(col+x)*cellPx,(row+y)*cellPx])))})}
-  return {grade,miss,extra,nM,nE,empty,n:chars.length};
+  return {grade,miss,extra,odd,nM,nE,nO,empty,n:chars.length};
 }
 function verdictText(j){
   if(j.empty===j.n)return '<b class="v0">×</b>まだ書いてないよ';
   if(j.empty)return '<b class="v0">×</b>書いてないマスがあるよ';
-  const parts=[];if(j.nM)parts.push(`<span style="color:var(--shu)">●</span>抜け ${j.nM}か所`);if(j.nE)parts.push(`<span style="color:var(--amber)">●</span>余分 ${j.nE}か所`);
+  const parts=[];if(j.nM)parts.push(`<span style="color:var(--shu)">●</span>抜け ${j.nM}画`);if(j.nE)parts.push(`<span style="color:var(--amber)">●</span>余分 ${j.nE}画`);if(j.nO)parts.push(`<span style="color:var(--odd)">●</span>形のずれ ${j.nO}画`);
   if(j.grade===2)return '<b class="v2">○</b>書けてるみたい';
   if(j.grade===1)return `<b class="v1">△</b>だいたいOK。${parts.join("　")}を見比べてね`;
   return `<b class="v${j.grade}">${j.grade?"△":"×"}</b>${parts.join("　")||"形がだいぶ違うかも"}`;
@@ -372,7 +389,7 @@ $("reveal").onclick=()=>{
 function doReveal(){
   const q=queue[idx].w;
   let j;try{j=judgeWord(q.a)}catch(err){console.error(err);j=null}
-  if(j){overlay={miss:j.miss,extra:j.extra};redraw();$("verdict").innerHTML=verdictText(j);$("verdict").classList.remove("hidden");
+  if(j){overlay={miss:j.miss,extra:j.extra,odd:j.odd};lastJudge={word:q.a,cols:gridCols,rows:Math.round(padH/cellPx),s:strokes.map(st=>st.map(p=>[+(p[0]*gridCols).toFixed(3),+(p[1]*Math.round(padH/cellPx)).toFixed(3)])),grade:j.grade};$("copyBtn").hidden=false;redraw();$("verdict").innerHTML=verdictText(j);$("verdict").classList.remove("hidden");
     document.querySelector(`.grade[data-g="${j.grade}"]`).classList.add("suggest");}
   $("answer").classList.remove("hidden");$("traceBtn").hidden=false;
   const b=$("blank");b.classList.add("done");b.firstElementChild.textContent=q.a;
