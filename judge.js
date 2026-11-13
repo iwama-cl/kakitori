@@ -7,6 +7,7 @@
   const S = 96;            // 判定用の解像度
   let TOL = 6;              // 実際の手書き（ペン）で調整した値         // この距離（px@96）以内なら「重なっている」
   let SEG_MIN = 10;
+  let SHEARS = [0, 0.1, 0.2];   // 右上がりのクセを打ち消す傾き補正
   let OKC = [0, 0.88, 0.85], MIDC = [2, 0.78, 0.75]; // [許す問題数, 骨組みの重なり率, 手書きの重なり率]
   let ELASTIC_SIGMA = 12, ELASTIC_ITERS = 10, CAPV = 16;       // これ以上つながった抜け・はみ出しを問題として数える（点1つ分）
   const refCache = new Map();
@@ -167,7 +168,7 @@
 
     // 位置・大きさの候補をいくつか試して一番重なるものを採用
     const cands = [];
-    const fit = (sx, sy, ox, oy) => cands.push({ sx, sy, ox, oy });
+    const fit = (sx, sy, ox, oy, h = 0) => cands.push({ sx, sy, ox, oy, h });
     const k = Math.min(rb.w / ub.w, rb.h / ub.h), kx = rb.w / ub.w, ky = rb.h / ub.h;
     const ucx = (ub.x0 + ub.x1) / 2, ucy = (ub.y0 + ub.y1) / 2, rcx = (rb.x0 + rb.x1) / 2, rcy = (rb.y0 + rb.y1) / 2;
     for (const s of [0.92, 1, 1.08]) {
@@ -175,15 +176,15 @@
       for (const [sx, sy] of aspectOK ? [[k, k], [kx, ky]] : [[k, k]]) {
         for (const [dx, dy] of [[0, 0], [2.5, 0], [-2.5, 0], [0, 2.5], [0, -2.5]]) {
           const SX = sx * s, SY = sy * s;
-          fit(SX, SY, ucx - (rcx + dx) / SX, ucy - (rcy + dy) / SY);
+          for (const h of SHEARS) fit(SX, SY, ucx - (rcx + dx) / SX, ucy - (rcy + dy) / SY, h);
         }
       }
     }
-    cands.push({ sx: 1, sy: 1, ox: 0, oy: 0 }); // マスに書いたまま
+    cands.push({ sx: 1, sy: 1, ox: 0, oy: 0, h: 0 }); // マスに書いたまま
 
     let best = null;
     for (const c of cands) {
-      const T = p => [(p[0] - c.ox) * c.sx, (p[1] - c.oy) * c.sy];
+      const T = p => { const X = (p[0] - c.ox) * c.sx; return [X, (p[1] - c.oy) * c.sy + c.h * (X - rcx)]; };
       const U = raw.map(T);
       let inP = 0; for (const p of U) if (at(Dref, p[0], p[1]) <= TOL) inP++;
       const Du = distMap(U);
@@ -242,11 +243,11 @@
     const c = best.c, rawCell = i => [raw[idx[i]][0] / S, raw[idx[i]][1] / S];
     return {
       grade, cov, prec, nMissing: missing.length, nExtra: extraAll.length,
-      missingCell: missing.flat().map(p => [(p[0] / c.sx + c.ox) / S, (p[1] / c.sy + c.oy) / S]),
+      missingCell: missing.flat().map(p => [(p[0] / c.sx + c.ox) / S, ((p[1] - c.h * (p[0] - rcx)) / c.sy + c.oy) / S]),
       extraCell: extraAll.flat().map(p => rawCell(p[2])),
     };
   }
 
   global.KakitoriJudge = { judgeChar, S, _thin: thin, _prune: prune, setTol: t => { TOL = t; }, setParams: (a, b, c) => { ELASTIC_SIGMA = a; ELASTIC_ITERS = b; CAPV = c; },
-    setAll: o => { if (o.tol != null) TOL = o.tol; if (o.sig != null) ELASTIC_SIGMA = o.sig; if (o.it != null) ELASTIC_ITERS = o.it; if (o.cap != null) CAPV = o.cap; if (o.seg != null) SEG_MIN = o.seg; if (o.ok) OKC = o.ok; if (o.mid) MIDC = o.mid; } };
+    setAll: o => { if (o.tol != null) TOL = o.tol; if (o.sig != null) ELASTIC_SIGMA = o.sig; if (o.it != null) ELASTIC_ITERS = o.it; if (o.cap != null) CAPV = o.cap; if (o.seg != null) SEG_MIN = o.seg; if (o.ok) OKC = o.ok; if (o.sh) SHEARS = o.sh; if (o.mid) MIDC = o.mid; } };
 })(window);
