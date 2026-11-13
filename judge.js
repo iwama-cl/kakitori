@@ -5,9 +5,10 @@
 // 書き順・画数・ハネトメは見ない。
 (function (global) {
   const S = 96;            // 判定用の解像度
-  let TOL = 4.5;            // 試験結果から決めた値（ゆがみに強く、点の抜けもある程度拾う）         // この距離（px@96）以内なら「重なっている」
-  const SEG_MIN = 7;
-  let ELASTIC_SIGMA = 12, ELASTIC_ITERS = 10, CAPV = 14;       // これ以上つながった抜け・はみ出しを問題として数える（点1つ分）
+  let TOL = 6;              // 実際の手書き（ペン）で調整した値         // この距離（px@96）以内なら「重なっている」
+  let SEG_MIN = 10;
+  let OKC = [0, 0.88, 0.85], MIDC = [2, 0.78, 0.75]; // [許す問題数, 骨組みの重なり率, 手書きの重なり率]
+  let ELASTIC_SIGMA = 12, ELASTIC_ITERS = 10, CAPV = 16;       // これ以上つながった抜け・はみ出しを問題として数える（点1つ分）
   const refCache = new Map();
 
   // 判定の基準字形は端末に必ずあるゴシック体（Android は Noto Sans CJK JP）。
@@ -234,8 +235,8 @@
 
     const issues = missing.length + extraAll.length;
     let grade;
-    if (issues === 0 && cov >= 0.9 && prec >= 0.88) grade = 2;
-    else if (issues <= 1 && cov >= 0.8 && prec >= 0.75) grade = 1;
+    if (issues <= OKC[0] && cov >= OKC[1] && prec >= OKC[2]) grade = 2;
+    else if (issues <= MIDC[0] && cov >= MIDC[1] && prec >= MIDC[2]) grade = 1;
     else grade = 0;
 
     const c = best.c, rawCell = i => [raw[idx[i]][0] / S, raw[idx[i]][1] / S];
@@ -246,5 +247,6 @@
     };
   }
 
-  global.KakitoriJudge = { judgeChar, S, _thin: thin, _prune: prune, setTol: t => { TOL = t; }, setParams: (a, b, c) => { ELASTIC_SIGMA = a; ELASTIC_ITERS = b; CAPV = c; } };
+  global.KakitoriJudge = { judgeChar, S, _thin: thin, _prune: prune, setTol: t => { TOL = t; }, setParams: (a, b, c) => { ELASTIC_SIGMA = a; ELASTIC_ITERS = b; CAPV = c; },
+    setAll: o => { if (o.tol != null) TOL = o.tol; if (o.sig != null) ELASTIC_SIGMA = o.sig; if (o.it != null) ELASTIC_ITERS = o.it; if (o.cap != null) CAPV = o.cap; if (o.seg != null) SEG_MIN = o.seg; if (o.ok) OKC = o.ok; if (o.mid) MIDC = o.mid; } };
 })(window);

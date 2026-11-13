@@ -362,6 +362,7 @@ function verdictText(j){
   if(j.empty)return '<b class="v0">×</b>書いてないマスがあるよ';
   const parts=[];if(j.nM)parts.push(`<span style="color:var(--shu)">●</span>抜け ${j.nM}か所`);if(j.nE)parts.push(`<span style="color:var(--amber)">●</span>余分 ${j.nE}か所`);
   if(j.grade===2)return '<b class="v2">○</b>書けてるみたい';
+  if(j.grade===1)return `<b class="v1">△</b>だいたいOK。${parts.join("　")}を見比べてね`;
   return `<b class="v${j.grade}">${j.grade?"△":"×"}</b>${parts.join("　")||"形がだいぶ違うかも"}`;
 }
 $("reveal").onclick=()=>{
