@@ -11,9 +11,13 @@
     revPen: 0.015,   // 逆向きに書いた画への小さなペナルティ
     tMatch: 0.16,    // これより遠いものは対応なし
     tOk: 0.085,      // これ以下なら「きれいに合っている」
-    mergeGap: 0.14,  // 続け書きとみなす画のすき間
+    mergeGap: 0.3,   // 続け書きとみなす画のすき間
+    mergeSpan: 3,    // 書き順で何画先までの組み合わせを考えるか
     iters: 2,
-    mergeStrict: 0.6,  // 続け書きの対応はやや厳しめに
+    splitMinLen: 0.5,
+    splitMaxAngle: 45, // 続け書きの各部分とお手本の画の向きの差（度）の上限 // 続け書きの各部分に必要な長さ（お手本の画に対する割合）
+    tMerge: 0.14,    // 続け書きとして認める上限
+    mergePen: 1.1,   // 続け書きの対応は少しだけ厳しめに
   };
 
   // ---------- 基本の点列処理 ----------
@@ -81,14 +85,18 @@
 
   // ---------- 割り当て ----------
   // units: お手本の「単画」と「続け書きした2画」
+  // 続け書きは書き順どおりとは限らないので、終点と始点が近い画どうしなら組み合わせを作る
   function buildUnits(ref) {
     const units = ref.map((s, i) => ({ idx: [i], pts: s }));
-    for (let i = 0; i + 1 < ref.length; i++) {
-      const a = ref[i], b = ref[i + 1];
-      if (Math.hypot(a[N - 1][0] - b[0][0], a[N - 1][1] - b[0][1]) < P.mergeGap) {
-        units.push({ idx: [i, i + 1], pts: resample(a.concat(b)) });
-        const c = ref[i + 2]; // 3画の続け書き（崩し字）
-        if (c && Math.hypot(b[N - 1][0] - c[0][0], b[N - 1][1] - c[0][1]) < P.mergeGap) units.push({ idx: [i, i + 1, i + 2], pts: resample(a.concat(b, c)) });
+    const gap = (a, b) => Math.hypot(ref[a][N - 1][0] - ref[b][0][0], ref[a][N - 1][1] - ref[b][0][1]);
+    const near = (a, b) => Math.abs(a - b) <= P.mergeSpan;
+    const unit = idx => { const all = idx.flatMap(k => ref[k]); return { idx, cen: centroid(all), L: idx.reduce((s, k) => s + length(ref[k]), 0) + idx.slice(1).reduce((s, k, n) => s + gap(idx[n], k), 0) }; };
+    for (let i = 0; i < ref.length; i++) for (let j = 0; j < ref.length; j++) {
+      if (i === j || !near(i, j) || gap(i, j) >= P.mergeGap) continue;
+      units.push(unit([i, j]));
+      for (let k = 0; k < ref.length; k++) { // 3画の続け書き（崩し字）
+        if (k === i || k === j || !near(j, k) || gap(j, k) >= P.mergeGap) continue;
+        units.push(unit([i, j, k]));
       }
     }
     return units;
@@ -98,20 +106,80 @@
     for (const m of match) { if (m) { t += m.c; m.idx.forEach(x => cov.add(x)); } else t += P.tMatch; }
     return t + (nRef - cov.size) * P.tMatch;
   }
+  // 手書き1画をいくつかに区切って、それぞれをお手本の画と比べる（続け書き用）
+  function splitCost(u, parts) {
+    const U = resample(u, 40), M = 40;
+    const seg = (a, b) => resample(U.slice(a, b + 1));
+    // 区切った各部分が、対応するお手本の画に見合う長さを持っていること（抜けた画をごまかさない）
+    const cum = [0]; for (let k = 1; k < M; k++) cum.push(cum[k - 1] + Math.hypot(U[k][0] - U[k - 1][0], U[k][1] - U[k - 1][1]));
+    const pl = parts.map(r => length(r));
+    const okLen = (k, a, b) => {
+      if (pl[k] >= 0.04 && (cum[b] - cum[a]) < P.splitMinLen * pl[k]) return false;
+      // 向きもおおよそ合っていること（縦画の一部を横画とみなさない）
+      const r = parts[k], vx = U[b][0] - U[a][0], vy = U[b][1] - U[a][1], wx = r[N - 1][0] - r[0][0], wy = r[N - 1][1] - r[0][1];
+      const lv = Math.hypot(vx, vy), lw = Math.hypot(wx, wy);
+      if (lv < 0.06 || lw < 0.06) return true;
+      return Math.abs(vx * wx + vy * wy) / (lv * lw) > Math.cos(P.splitMaxAngle * Math.PI / 180);
+    };
+    // 短い画（点など）も同じ重みで見る。どこか1つでも合わなければ続け書きとは認めない
+    const comb = cs => 0.5 * cs.reduce((a, b) => a + b, 0) / cs.length + 0.5 * Math.max(...cs);
+    let best = 1e9;
+    if (parts.length === 2) {
+      for (let t = 3; t < M - 3; t++) {
+        if (!okLen(0, 0, t) || !okLen(1, t, M - 1)) continue;
+        const c = comb([cost(seg(0, t), parts[0]), cost(seg(t, M - 1), parts[1])]);
+        if (c < best) best = c;
+      }
+    } else {
+      for (let t1 = 3; t1 < M - 6; t1 += 3) for (let t2 = t1 + 3; t2 < M - 3; t2 += 3) {
+        if (!okLen(0, 0, t1) || !okLen(1, t1, t2) || !okLen(2, t2, M - 1)) continue;
+        const c = comb([cost(seg(0, t1), parts[0]), cost(seg(t1, t2), parts[1]), cost(seg(t2, M - 1), parts[2])]);
+        if (c < best) best = c;
+      }
+    }
+    return best;
+  }
   function assign(user, ref, units) {
-    // まず単画どうしで最適割り当て
     const C = user.map(u => ref.map(r => cost(u, r)));
-    const a = hungarian(C);
-    let match = user.map((_, i) => (a[i] >= 0 && C[i][a[i]] < P.tMatch ? { idx: [a[i]], c: C[i][a[i]] } : null));
-    // 続け書き：手書き1画がお手本2画の代わりになるなら置き換える
+    // 続け書きの組（手書き1画 → お手本2〜3画）を決めたうえで、残りを単画どうしで最適に割り当てる
+    const solve = merges => {
+      const usedU = new Set(), usedR = new Set();
+      for (const [i, m] of merges) { usedU.add(i); m.idx.forEach(k => usedR.add(k)); }
+      const ui = user.map((_, i) => i).filter(i => !usedU.has(i)), ri = ref.map((_, k) => k).filter(k => !usedR.has(k));
+      const match = user.map(() => null);
+      for (const [i, m] of merges) match[i] = m;
+      if (ui.length && ri.length) {
+        const a = hungarian(ui.map(i => ri.map(k => C[i][k])));
+        ui.forEach((i, n) => { const k = a[n] >= 0 ? ri[a[n]] : -1; if (k >= 0 && C[i][k] < P.tMatch) match[i] = { idx: [k], c: C[i][k] }; });
+      }
+      return match;
+    };
+    let merges = new Map(), match = solve(merges), cur = total(match, ref.length);
+    // 候補（手書き1画 × 続け書きの組）を前もって絞り込み、ずれを計算しておく
+    const uInfo = user.map(u => ({ c: centroid(u), L: length(u) }));
+    const cands = [];
     for (const un of units) {
       if (un.idx.length < 2) continue;
       for (let i = 0; i < user.length; i++) {
-        const c2 = cost(user[i], un.pts);
-        if (c2 >= P.tMatch * P.mergeStrict) continue;
-        const trial = match.map((m, k) => (k === i ? { idx: un.idx.slice(), c: c2 } : (m && m.idx.some(x => un.idx.includes(x)) ? null : m)));
-        if (total(trial, ref.length) + 0.005 < total(match, ref.length)) match = trial;
+        const ui = uInfo[i];
+        if (Math.hypot(ui.c[0] - un.cen[0], ui.c[1] - un.cen[1]) > 0.22) continue;
+        const ratio = ui.L / un.L;
+        if (ratio < 0.55 || ratio > 1.8) continue;
+        const c2 = splitCost(user[i], un.idx.map(k => ref[k])) * P.mergePen;
+        if (c2 < P.tMerge) cands.push({ i, idx: un.idx, c: c2 });
       }
+    }
+    // 一番よくなる続け書きの組を1つずつ採用していく
+    for (let round = 0; round < 5 && cands.length; round++) {
+      let best = null;
+      for (const cd of cands) {
+        const m2 = new Map([...merges].filter(([i, m]) => i !== cd.i && !m.idx.some(k => cd.idx.includes(k))));
+        m2.set(cd.i, { idx: cd.idx, c: cd.c });
+        const mt = solve(m2), t = total(mt, ref.length);
+        if (t + 0.005 < (best ? best.t : cur)) best = { t, m2, mt };
+      }
+      if (!best) break;
+      merges = best.m2; match = best.mt; cur = best.t;
     }
     return match;
   }
@@ -190,9 +258,10 @@
     const extraIdx = match.map((m, i) => (m ? -1 : i)).filter(i => i >= 0);
     const oddIdx = match.map((m, i) => (m && m.c > P.tOk * (m.idx.length > 1 ? 1.3 : 1) ? i : -1)).filter(i => i >= 0);
     const nM = missingIdx.length, nE = extraIdx.length, nO = oddIdx.length;
+    const oddMerged = oddIdx.some(i => match[i].idx.length > 1);
     let grade;
-    if (nM === 0 && nE === 0 && nO <= 1) grade = 2;
-    else if (nM + nE <= 1 && nO <= 2) grade = 1;
+    if (nM === 0 && nE === 0 && nO <= 1 && !oddMerged) grade = 2;
+    else if (nM + nE <= 2 && nO <= 3) grade = 1;
     else grade = 0;
 
     // 抜けた画は、手書きの座標に戻して表示（全体の合わせの逆変換）
@@ -204,6 +273,7 @@
       extraCell: extraIdx.flatMap(i => dense(strokesIn[i])),
       oddCell: oddIdx.flatMap(i => dense(strokesIn[i])),
       cov: 1 - nM / ref.length, prec: 1 - nE / strokesIn.length,
+      _m: match.map(m => (m ? m.idx.join('+') + ':' + m.c.toFixed(3) : '-')).join(' '), _miss: missingIdx.join(','),
     };
   }
 

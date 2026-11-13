@@ -1,5 +1,5 @@
 // 書き取り帳 オフライン用。更新したら VERSION を上げる
-const VERSION = "kakitori-v6";
+const VERSION = "kakitori-v7";
 const CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "judge.js", "strokes.js", "strokejudge.js"];
 
 self.addEventListener("install", e => {
