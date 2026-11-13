@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="theme-color" content="#f4f6f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131817" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;font-size:14px}[hidden]{display:none!important}*,*::before,*::after{box-sizing:inherit}</style>
+<title>書き取り帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Klee+One:wght@600&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@700&display=swap">
+<style>
+/* Layout: 原稿用紙ノート。片手で届くよう操作ボタンは下部に集約、書く欄は方眼マス */
+:root{
+  --paper:#f4f6f1; --surface:#ffffff; --ink:#1c2430; --muted:#6c766f;
+  --grid:#8fb39a; --grid-soft:#cfe0d3; --shu:#c9432a; --amber:#b9851c; --line:#dde5df;
+  --f-ui:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",sans-serif;
+  --f-kyokasho:"Klee One","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-title:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#131817; --surface:#1b2120; --ink:#e7ebe5; --muted:#8e9992;
+  --grid:#4f7a5d; --grid-soft:#2a3a30; --shu:#ff7b5e; --amber:#e3b04b; --line:#29312e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#131817; --surface:#1b2120; --ink:#e7ebe5; --muted:#8e9992;
+  --grid:#4f7a5d; --grid-soft:#2a3a30; --shu:#ff7b5e; --amber:#e3b04b; --line:#29312e; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent}
+.app{max-width:520px;margin:0 auto;height:100%;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible{outline:2px solid var(--grid);outline-offset:2px}
+.screen{display:flex;flex-direction:column;flex:1;min-height:0;padding-block:14px}
+
+/* home */
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-title);font-size:28px;margin:0;letter-spacing:.08em}
+.brand small{color:var(--muted);font-size:12px}
+.lead{color:var(--muted);margin:6px 0 18px;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:2px solid var(--grid);border-bottom:1px solid var(--grid-soft)}
+.stat{padding:12px 4px;text-align:center}
+.stat+.stat{border-left:1px solid var(--grid-soft)}
+.stat b{display:block;font-size:24px;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat span{font-size:11px;color:var(--muted);letter-spacing:.06em}
+.due{margin:14px 0 4px;font-size:14px}
+.due b{color:var(--shu);font-variant-numeric:tabular-nums}
+.label{font-size:11px;letter-spacing:.12em;color:var(--muted);margin:18px 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:14px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.spacer{flex:1;min-height:20px}
+.primary{width:100%;padding:16px;border-radius:14px;background:var(--ink);color:var(--paper);font-weight:700;font-size:17px;letter-spacing:.04em}
+.note{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+.sample{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--muted)}
+.sample p{margin:0}
+
+/* drill */
+.topbar{display:flex;align-items:center;gap:12px}
+.quit{font-size:13px;color:var(--muted);padding:6px 0}
+.bar{flex:1;height:4px;background:var(--grid-soft);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--grid);transition:width .3s}
+.count{font-size:13px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.cat{margin-top:18px;font-size:11px;letter-spacing:.12em;color:var(--grid)}
+.sentence{font-size:21px;line-height:2.1;margin:4px 0 0;text-wrap:balance}
+.blank{display:inline-block;border-bottom:2px solid var(--shu);padding:0 6px;margin:0 2px;line-height:1.4}
+.blank span{font-size:15px;color:var(--shu);letter-spacing:.08em}
+.blank.done span{font-family:var(--f-kyokasho);font-size:21px;color:var(--ink);letter-spacing:0}
+.padzone{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;min-height:0;padding-block:6px}
+.padwrap{position:relative;touch-action:none}
+.cells,.trace{display:grid}
+.cells{border-top:1.5px solid var(--grid);border-left:1.5px solid var(--grid)}
+.cell{border-right:1.5px solid var(--grid);border-bottom:1.5px solid var(--grid);position:relative;background:var(--surface)}
+.answer{display:flex;align-items:center;gap:10px;min-height:44px}
+.cell::before,.cell::after{content:"";position:absolute;border:0 dashed var(--grid-soft)}
+.cell::before{left:50%;top:0;bottom:0;border-left-width:1px}
+.cell::after{top:50%;left:0;right:0;border-top-width:1px}
+.trace{position:absolute;top:1.5px;left:1.5px;pointer-events:none;opacity:0;transition:opacity .2s}
+.trace.on{opacity:.2}
+.trace span{display:grid;place-items:center;font-family:var(--f-kyokasho);line-height:1}
+canvas{position:absolute;top:1.5px;left:1.5px;touch-action:none}
+.answer b{font-family:var(--f-kyokasho);font-weight:600;font-size:36px;line-height:1;color:var(--ink);letter-spacing:.06em}
+.answer small{font-size:11px;letter-spacing:.12em;color:var(--muted)}
+.answer.hidden{visibility:hidden}
+.anscap{font-size:11px;letter-spacing:.12em;color:var(--muted);text-align:center}
+.tools{display:flex;gap:18px;justify-content:center}
+.tool{font-size:13px;color:var(--muted);padding:6px 8px;border-radius:8px}
+.tool:active{background:var(--grid-soft)}
+.actions{display:grid;gap:10px;padding-bottom:4px}
+.grades{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grade{padding:14px 4px;border-radius:14px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px}
+.grade b{font-size:22px;line-height:1.1;font-weight:500}
+.g-ok b{color:var(--shu)} .g-mid b{color:var(--amber)} .g-ng b{color:var(--muted)}
+
+/* result */
+.res-head{text-align:center;padding:20px 0 10px}
+.res-head .big{font-family:var(--f-title);font-size:44px;color:var(--shu);font-variant-numeric:tabular-nums}
+.res-head p{margin:0;color:var(--muted);font-size:14px}
+.reslist{list-style:none;margin:10px 0 0;padding:0;border-top:2px solid var(--grid);overflow-y:auto;min-height:0}
+.reslist li{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--grid-soft)}
+.mk{font-size:18px;text-align:center}
+.reslist .w{font-family:var(--f-kyokasho);font-size:22px}
+.reslist .r{font-size:12px;color:var(--muted)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.ghost{padding:15px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:500}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <!-- HOME -->
+  <section class="screen" id="home">
+    <div class="brand"><h1>書き取り帳</h1><small>読めるのに書けない字を</small></div>
+    <p class="lead">文中の空欄を指で書いて、答え合わせ。書けなかった字ほど早めにまた出てきます。</p>
+    <div class="stats">
+      <div class="stat"><b id="sMaster">0</b><span>覚えた</span></div>
+      <div class="stat"><b id="sLearn">0</b><span>学習中</span></div>
+      <div class="stat"><b id="sNew">0</b><span>未出題</span></div>
+    </div>
+    <p class="due">今日の復習　<b id="sDue">0</b> 語</p>
+    <div class="label">ジャンル</div>
+    <div class="chips" id="chips"></div>
+    <div class="sample"><p>例：「添付ファイルをご確認ください」の「てんぷ」を書く → 答えを見て、書けた／あやしい／書けなかった を自分で付ける。</p></div>
+    <div class="spacer"></div>
+    <button class="primary" id="start">10問はじめる</button>
+    <p class="note">記録はこの端末のブラウザに残ります</p>
+  </section>
+
+  <!-- DRILL -->
+  <section class="screen" id="drill" hidden>
+    <div class="topbar">
+      <button class="quit" id="quit">やめる</button>
+      <div class="bar"><i id="prog" style="width:0"></i></div>
+      <span class="count" id="count">1/10</span>
+    </div>
+    <div class="cat" id="qcat"></div>
+    <p class="sentence" id="sentence"></p>
+    <div class="padzone">
+      <div class="padwrap" id="padwrap">
+        <div class="cells" id="cells"></div>
+        <div class="trace" id="trace"></div>
+        <canvas id="cv"></canvas>
+      </div>
+      <div class="tools">
+        <button class="tool" id="undo">↶ 一画戻す</button>
+        <button class="tool" id="clear">消す</button>
+        <button class="tool" id="traceBtn" hidden>なぞって練習</button>
+      </div>
+      <div class="answer hidden" id="answer"><small>正解</small><b id="ansText"></b></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="reveal">答えを見る</button>
+      <div class="grades" id="grades" hidden>
+        <button class="grade g-ok" data-g="2"><b>○</b>書けた</button>
+        <button class="grade g-mid" data-g="1"><b>△</b>あやしい</button>
+        <button class="grade g-ng" data-g="0"><b>×</b>書けなかった</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULT -->
+  <section class="screen" id="result" hidden>
+    <div class="res-head"><div class="big" id="score">0/10</div><p>書けた字の数</p></div>
+    <ul class="reslist" id="reslist"></ul>
+    <div class="spacer"></div>
+    <div class="row2">
+      <button class="ghost" id="home2">ホームへ</button>
+      <button class="primary" id="again">もう10問</button>
+    </div>
+  </section>
+</div>
+
+<script>
+const W = [
+ // 仕事（メモ・伝言・書類で手書きする語）
+ ["work","＿ファイルをご確認ください","てんぷ","添付"],["work","＿書を月末に送る","せいきゅう","請求"],
+ ["work","＿書を受け取る","りょうしゅう","領収"],["work","部長の＿をもらう","しょうにん","承認"],
+ ["work","＿日を調整する","のうひん","納品"],["work","＿書を作成する","みつもり","見積"],
+ ["work","保守＿を更新する","けいやく","契約"],["work","会議の＿録","ぎじ","議事"],
+ ["work","山田様より＿あり","でんごん","伝言"],["work","＿し電話をお願いします","おりかえ","折返"],
+ ["work","＿対応","しきゅう","至急"],["work","作業を＿する","いらい","依頼"],
+ ["work","＿いたしました","しょうち","承知"],["work","＿者：佐藤","たんとう","担当"],
+ ["work","誤りを＿する","ていせい","訂正"],["work","＿欄に記入する","びこう","備考"],
+ ["work","書類に＿する","なついん","捺印"],["work","＿事項を確認する","きさい","記載"],
+ ["work","＿数を確認する","ざいこ","在庫"],["work","期末の＿","たなおろし","棚卸"],
+ ["work","売上＿を起こす","でんぴょう","伝票"],["work","システム＿","しょうがい","障害"],
+ ["work","サーバーを＿させる","ふっきゅう","復旧"],["work","＿日は休みます","ふりかえ","振替"],
+ ["work","＿をメモする","ようけん","用件"],["work","納期を＿する","げんしゅ","厳守"],
+ // 暮らし（書類・宛名・買い物メモで手書きする語）
+ ["life","申込書の＿欄","じゅうしょ","住所"],["life","世帯主との＿","つづきがら","続柄"],
+ ["life","＿先の電話番号","きんむ","勤務"],["life","本人が＿する","しょめい","署名"],
+ ["life","代金を＿む","ふりこ","振込"],["life","転居の＿き","てつづ","手続"],
+ ["life","＿の不在票","たくはい","宅配"],["life","＿番号を書く","ゆうびん","郵便"],
+ ["life","＿に宛名を書く","ふうとう","封筒"],["life","＿板を回す","かいらん","回覧"],
+ ["life","町内会の＿","やくいん","役員"],["life","＿の予約","しかい","歯科"],
+ ["life","＿券を忘れた","しんさつ","診察"],["life","＿で薬をもらう","やっきょく","薬局"],
+ ["life","今夜の＿","こんだて","献立"],["life","＿を買う","せんざい","洗剤"],
+ ["life","＿の中を整理する","れいぞうこ","冷蔵庫"],["life","＿物を干す","せんたく","洗濯"],
+ ["life","部屋を＿する","そうじ","掃除"],["life","＿を交換する","かんでんち","乾電池"],
+ ["life","＿を払う","かいひ","会費"],["life","粗大ごみの＿","かいしゅう","回収"],
+ ["life","学校への＿届","けっせき","欠席"],["life","＿の名前を書く","ほごしゃ","保護者"],
+ // 手紙・冠婚葬祭（のし袋・カード・一筆箋）
+ ["form","＿　時下ますますご清栄","はいけい","拝啓"],["form","＿ではございますが","きょうしゅく","恐縮"],
+ ["form","営業部＿","おんちゅう","御中"],["form","＿んでお祝い申し上げます","つつし","謹"],
+ ["form","ご＿袋を用意する","しゅうぎ","祝儀"],["form","＿を包む","こうでん","香典"],
+ ["form","ご＿申し上げます","めいふく","冥福"],["form","ご＿ください","じあい","自愛"],
+ ["form","拝啓……敬＿","ぐ","具"],["form","御＿（おみまい）","みまい","見舞"],
+ ["form","＿見舞い申し上げます","しょちゅう","暑中"],["form","のし袋に＿品と書く","そ","粗"],
+ ["form","ご＿お祝い","けっこん","結婚"],["form","ご＿お祝い","しゅっさん","出産"],
+ ["form","ご＿お祝い","にゅうがく","入学"],["form","ご＿をお祈りします","たこう","多幸"],
+];
+const CATS={all:"すべて",work:"仕事",life:"暮らし",form:"手紙・冠婚葬祭"};
+const WORDS=W.map((w,i)=>({id:w[3],c:w[0],s:w[1],r:w[2],a:w[3]}));
+const DAY=86400000, INTV=[0,1,3,7,14,30];
+const KEY="kakitori.v1";
+let db={}; try{db=JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){db={}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}}
+let cat="all"; try{cat=localStorage.getItem(KEY+".cat")||"all"}catch(e){}
+
+const $=id=>document.getElementById(id);
+function show(id){["home","drill","result"].forEach(s=>$(s).hidden=s!==id)}
+
+function homeRender(){
+  const now=Date.now(); let m=0,l=0,n=0,d=0;
+  WORDS.forEach(w=>{const r=db[w.id]; if(!r)n++; else{ r.box>=3?m++:l++; if(r.due<=now)d++; }});
+  $("sMaster").textContent=m;$("sLearn").textContent=l;$("sNew").textContent=n;$("sDue").textContent=d;
+  $("chips").innerHTML=Object.entries(CATS).map(([k,v])=>`<button class="chip" data-c="${k}" aria-pressed="${k===cat}">${v}</button>`).join("");
+  show("home");
+}
+$("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;cat=b.dataset.c;try{localStorage.setItem(KEY+".cat",cat)}catch(e){}homeRender()});
+
+// session
+let queue=[],idx=0,results=[],revealed=false,total=10;
+function buildQueue(){
+  const now=Date.now(), pool=WORDS.filter(w=>cat==="all"||w.c===cat);
+  const due=pool.filter(w=>db[w.id]&&db[w.id].due<=now).sort((a,b)=>db[a.id].box-db[b.id].box||db[a.id].due-db[b.id].due);
+  const fresh=shuffle(pool.filter(w=>!db[w.id]));
+  const later=shuffle(pool.filter(w=>db[w.id]&&db[w.id].due>now)).sort((a,b)=>db[a.id].box-db[b.id].box);
+  return shuffle([...due,...fresh,...later].slice(0,10)).map(w=>({w,retry:false}));
+}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function start(){queue=buildQueue();total=queue.length;idx=0;results=[];show("drill");question()}
+$("start").onclick=start;$("again").onclick=start;$("home2").onclick=homeRender;
+$("quit").onclick=()=>{results.length?finish():homeRender()};
+
+// pad
+const cv=$("cv"),ctx=cv.getContext("2d");let strokes=[],cur=null,cellPx=120,nChars=1,padW=120,padH=120;
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function layoutPad(){
+  const zone=$("padwrap").parentElement, availW=zone.clientWidth-4;
+  const availH=Math.max(140,zone.clientHeight-16-40-44-16-6);
+  let best={cell:0,cols:nChars,rows:1};
+  for(let cols=nChars;cols>=1;cols--){
+    const rows=Math.ceil(nChars/cols), cell=Math.floor(Math.min(320,availW/cols,availH/rows));
+    if(cell>best.cell+8) best={cell,cols,rows};
+  }
+  cellPx=best.cell; padW=cellPx*best.cols; padH=cellPx*best.rows;
+  const grid=`repeat(${best.cols},${cellPx}px)`;
+  $("cells").style.gridTemplateColumns=grid; $("trace").style.gridTemplateColumns=grid;
+  $("cells").innerHTML=Array.from({length:best.cols*best.rows},()=>`<div class="cell" style="height:${cellPx}px"></div>`).join("");
+  const fs=`font-size:${Math.round(cellPx*.78)}px;width:${cellPx}px;height:${cellPx}px`;
+  $("trace").innerHTML=[...queue[idx].w.a].map(ch=>`<span style="${fs}">${ch}</span>`).join("");
+  $("ansText").textContent=queue[idx].w.a;
+  const dpr=window.devicePixelRatio||1;
+  cv.style.width=padW+"px";cv.style.height=padH+"px";cv.width=padW*dpr;cv.height=padH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  redraw();
+}
+function redraw(){
+  const W=padW,H=padH;ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=cssVar("--ink");ctx.lineCap="round";ctx.lineJoin="round";ctx.lineWidth=Math.max(3,cellPx*.05);
+  strokes.forEach(s=>{if(!s.length)return;ctx.beginPath();ctx.moveTo(s[0][0]*W,s[0][1]*H);
+    if(s.length===1){ctx.lineTo(s[0][0]*W+.1,s[0][1]*H)}
+    for(let i=1;i<s.length-1;i++){const mx=(s[i][0]+s[i+1][0])/2*W,my=(s[i][1]+s[i+1][1])/2*H;ctx.quadraticCurveTo(s[i][0]*W,s[i][1]*H,mx,my)}
+    if(s.length>1){const l=s[s.length-1];ctx.lineTo(l[0]*W,l[1]*H)}ctx.stroke()});
+}
+function pt(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]}
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);cur=[pt(e)];strokes.push(cur);redraw()});
+cv.addEventListener("pointermove",e=>{if(!cur)return;cur.push(pt(e));redraw()});
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>cur=null));
+$("undo").onclick=()=>{strokes.pop();redraw()};
+$("clear").onclick=()=>{strokes=[];redraw()};
+$("traceBtn").onclick=()=>{const t=$("trace");const on=!t.classList.contains("on");t.classList.toggle("on",on);$("traceBtn").textContent=on?"なぞり終了":"なぞって練習";strokes=[];redraw()};
+window.addEventListener("resize",()=>{if(!$("drill").hidden)layoutPad()});
+
+function question(){
+  const q=queue[idx].w;revealed=false;strokes=[];nChars=[...q.a].length;
+  $("prog").style.width=(Math.min(idx,total)/total*100)+"%";
+  $("count").textContent=`${Math.min(idx+1,total)}/${total}`+(queue[idx].retry?"　再出題":"");
+  $("qcat").textContent=CATS[q.c];
+  const [pre,post]=q.s.split("＿");
+  $("sentence").innerHTML=`${pre}<span class="blank" id="blank"><span>${q.r}</span></span>${post}`;
+  $("answer").classList.add("hidden");
+  $("trace").classList.remove("on");$("traceBtn").hidden=true;$("traceBtn").textContent="なぞって練習";
+  $("reveal").hidden=false;$("grades").hidden=true;
+  requestAnimationFrame(layoutPad);
+}
+$("reveal").onclick=()=>{
+  revealed=true;const q=queue[idx].w;
+  $("answer").classList.remove("hidden");$("traceBtn").hidden=false;
+  const b=$("blank");b.classList.add("done");b.firstElementChild.textContent=q.a;
+  $("reveal").hidden=true;$("grades").hidden=false;
+};
+$("grades").addEventListener("click",e=>{
+  const b=e.target.closest(".grade");if(!b)return;const g=+b.dataset.g,item=queue[idx],id=item.w.id,now=Date.now();
+  if(!item.retry){
+    const r=db[id]||{box:0,due:now};
+    if(g===2){r.box=Math.min(5,r.box+1);r.due=now+INTV[r.box]*DAY}
+    else if(g===1){r.box=Math.max(1,r.box);r.due=now+DAY}
+    else{r.box=0;r.due=now}
+    db[id]=r;save();results.push({w:item.w,g});
+    if(g===0)queue.push({w:item.w,retry:true});
+  }
+  idx++; idx<queue.length?question():finish();
+});
+function finish(){
+  const ok=results.filter(r=>r.g===2).length;
+  $("score").textContent=`${ok}/${results.length}`;
+  const mk=["×","△","○"],col=["var(--muted)","var(--amber)","var(--shu)"];
+  $("reslist").innerHTML=results.map(r=>`<li><span class="mk" style="color:${col[r.g]}">${mk[r.g]}</span><span class="w">${r.w.a}</span><span class="r">${r.w.r}</span></li>`).join("");
+  show("result");
+}
+homeRender();
+</script>
+<script>
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}
+</script>
+
+</body>
+</html>
