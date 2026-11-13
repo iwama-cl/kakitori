@@ -121,6 +121,17 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
 .reslist .r{font-size:12px;color:var(--muted)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
 .ghost{padding:15px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:500}
+.startrow{display:grid;grid-template-columns:1fr auto;gap:10px}
+#startTest{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.3;padding:8px 18px;font-weight:700}
+#startTest small{font-size:11px;font-weight:400;color:var(--muted)}
+.testinfo{font-size:13px;color:var(--muted);margin:10px 0 0;text-align:center;min-height:1.6em}
+.testinfo b{color:var(--ink);font-variant-numeric:tabular-nums}
+.chip small{display:block;font-size:10px;color:var(--muted);line-height:1.1;font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"] small{color:inherit;opacity:.75}
+.res-kind{font-size:12px;letter-spacing:.12em;color:var(--grid);margin:0 0 4px}
+.estimate{font-size:14px;color:var(--ink);margin:10px auto 0;max-width:30em;line-height:1.7}
+.estimate small{display:block;font-size:12px;color:var(--muted)}
+.mode-test .topbar .count{color:var(--shu)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -144,7 +155,11 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
     <div class="chips" id="chipsK"></div>
     <div class="sample"><p>実用編：「＿ファイルをご確認ください」の「てんぷ」を書く。<br>級別：「＿燥（かんそう）」の空欄に入る1字を書く。<br>判定がおかしいと思ったら、○△× は自分で選び直せます。</p></div>
     <div class="spacer"></div>
-    <button class="primary" id="start">10問はじめる</button>
+    <div class="startrow">
+      <button class="primary" id="start">10問はじめる</button>
+      <button class="ghost" id="startTest">実力テスト<small>20問</small></button>
+    </div>
+    <p class="testinfo" id="testInfo"></p>
     <p class="note">記録はこの端末のブラウザに残ります<br>書き順データ：<a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener" style="color:inherit">KanjiVG</a>（CC BY-SA 3.0）<br>漢字・熟語データ：<a href="https://www.edrdg.org/" target="_blank" rel="noopener" style="color:inherit">KANJIDIC2 / JMdict（EDRDG）</a>（CC BY-SA 4.0）</p>
   </section>
 
@@ -184,7 +199,7 @@ canvas{position:absolute;top:0;left:0;touch-action:none}
 
   <!-- RESULT -->
   <section class="screen" id="result" hidden>
-    <div class="res-head"><div class="big" id="score">0/10</div><p>書けた字の数</p></div>
+    <div class="res-head"><p class="res-kind" id="resKind" hidden></p><div class="big" id="score">0/10</div><p id="scoreCap">書けた字の数</p><p class="estimate" id="estimate" hidden></p></div>
     <ul class="reslist" id="reslist"></ul>
     <div class="spacer"></div>
     <div class="row2">
@@ -260,14 +275,23 @@ function homeRender(){
   const now=Date.now(); let m=0,l=0,n=0,d=0;
   WORDS.filter(w=>inCat(w,cat)).forEach(w=>{const r=db[w.id]; if(!r)n++; else{ r.box>=3?m++:l++; if(r.due<=now)d++; }});
   $("sMaster").textContent=m;$("sLearn").textContent=l;$("sNew").textContent=n;$("sDue").textContent=d;
-  $("chips").innerHTML=Object.entries(CATS).map(([k,v])=>`<button class="chip" data-c="${k}" aria-pressed="${k===cat}">${v}</button>`).join("");
-  $("chipsK").innerHTML=LEVELS.map(([k,v])=>`<button class="chip" data-c="k:${k}" aria-pressed="${"k:"+k===cat}">${v}</button>`).join("");
+  const badge=c=>{const t=lastTest(c);return t?`<small>${Math.round(t.p*100)}%</small>`:""};
+  $("chipsK").innerHTML=LEVELS.map(([k,v])=>`<button class="chip" data-c="k:${k}" aria-pressed="${"k:"+k===cat}">${v}${badge("k:"+k)}</button>`).join("");
+  $("chips").innerHTML=Object.entries(CATS).map(([k,v])=>`<button class="chip" data-c="${k}" aria-pressed="${k===cat}">${v}${badge(k)}</button>`).join("");
+  const lt=lastTest(cat),h=tests[cat]||[];
+  $("testInfo").innerHTML=lt?`${catName(cat)}の実力テスト：前回 <b>${Math.round(lt.p*100)}%</b>（${fmtDate(lt.t)}）`+(h.length>1?`　最高 <b>${Math.round(Math.max(...h.map(x=>x.p))*100)}%</b>`:""):`実力テストで${catName(cat)}がどれくらい書けるか測れます`;
   show("home");
 }
 ["chips","chipsK"].forEach(id=>$(id).addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;cat=b.dataset.c;try{localStorage.setItem(KEY+".cat",cat)}catch(e){}homeRender()}));
 
 // session
-let queue=[],idx=0,results=[],revealed=false,total=10;
+let queue=[],idx=0,results=[],revealed=false,total=10,mode="learn";
+// 実力テストの記録（級ごと）。学習の予定（○△×の間隔）は変えず、まちがえた字だけ復習に回す
+let tests={}; try{tests=JSON.parse(localStorage.getItem(KEY+".tests")||"{}")||{}}catch(e){tests={}}
+function saveTests(){try{localStorage.setItem(KEY+".tests",JSON.stringify(tests))}catch(e){}}
+const lastTest=c=>{const h=tests[c];return h&&h.length?h[h.length-1]:null};
+const fmtDate=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}`};
+const catName=c=>c.startsWith("k:")?(LVNAME[c.slice(2)]||"常用漢字すべて"):("実用編・"+CATS[c]);
 function buildQueue(){
   const now=Date.now(), pool=WORDS.filter(w=>inCat(w,cat));
   const due=pool.filter(w=>db[w.id]&&db[w.id].due<=now).sort((a,b)=>db[a.id].box-db[b.id].box||db[a.id].due-db[b.id].due);
@@ -276,8 +300,10 @@ function buildQueue(){
   return shuffle([...due,...fresh,...later].slice(0,10)).map(w=>({w,retry:false}));
 }
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
-function start(){queue=buildQueue();total=queue.length;idx=0;results=[];show("drill");question()}
-$("start").onclick=start;$("again").onclick=start;$("home2").onclick=homeRender;
+function begin(){total=queue.length;idx=0;results=[];document.body.classList.toggle("mode-test",mode==="test");show("drill");question()}
+function start(){mode="learn";queue=buildQueue();begin()}
+function startTest(){mode="test";queue=shuffle(WORDS.filter(w=>inCat(w,cat))).slice(0,20).map(w=>({w,retry:false}));begin()}
+$("start").onclick=start;$("startTest").onclick=startTest;$("again").onclick=()=>mode==="test"?startTest():start();$("home2").onclick=homeRender;
 $("quit").onclick=()=>{results.length?finish():homeRender()};
 
 // pad
@@ -340,7 +366,7 @@ window.addEventListener("resize",()=>{if(!$("drill").hidden)layoutPad()});
 function question(){
   const q=queue[idx].w;revealed=false;strokes=[];overlay=null;nChars=[...q.a].length;
   $("prog").style.width=(Math.min(idx,total)/total*100)+"%";
-  $("count").textContent=`${Math.min(idx+1,total)}/${total}`+(queue[idx].retry?"　再出題":"");
+  $("count").textContent=(mode==="test"?"テスト ":"")+`${Math.min(idx+1,total)}/${total}`+(queue[idx].retry?"　再出題":"");
   const item=queue[idx];
   if(q.k){ // 熟語の1字を書く。出す熟語は毎回ランダム
     if(!item.v)item.v=q.vs[Math.random()*q.vs.length|0];
@@ -425,7 +451,10 @@ function doReveal(){
 }
 $("grades").addEventListener("click",e=>{
   const b=e.target.closest(".grade");if(!b)return;const g=+b.dataset.g,item=queue[idx],id=item.w.id,now=Date.now();
-  if(!item.retry){
+  if(mode==="test"){ // テストでは間隔を伸ばさない。まちがえた字は今日の復習に入れる
+    if(g<2){const r=db[id]||{box:0,due:now};if(g===0)r.box=0;r.due=now;db[id]=r;save()}
+    results.push({w:item.w,g,s:item.s,rd:item.r});
+  }else if(!item.retry){
     const r=db[id]||{box:0,due:now};
     if(g===2){r.box=Math.min(5,r.box+1);r.due=now+INTV[r.box]*DAY}
     else if(g===1){r.box=Math.max(1,r.box);r.due=now+DAY}
@@ -438,6 +467,19 @@ $("grades").addEventListener("click",e=>{
 function finish(){
   const ok=results.filter(r=>r.g===2).length;
   $("score").textContent=`${ok}/${results.length}`;
+  $("resKind").hidden=mode!=="test";$("estimate").hidden=mode!=="test";
+  $("scoreCap").textContent="書けた字の数";$("again").textContent=mode==="test"?"もう一度テスト":"もう10問";
+  if(mode==="test"&&results.length){
+    // ○=1点、△=0.5点。出題数から、この級全体で書ける字数を推定する（95%のぶれ幅つき）
+    const n=results.length,pt=results.reduce((a,r)=>a+(r.g===2?1:r.g===1?.5:0),0),p=pt/n;
+    const N=WORDS.filter(w=>inCat(w,cat)).length,se=Math.sqrt(Math.max(p*(1-p),.04)/n)*Math.sqrt(Math.max(0,(N-n)/(N-1||1)));
+    const lo=Math.max(0,p-1.96*se),hi=Math.min(1,p+1.96*se);
+    $("resKind").textContent=catName(cat)+" 実力テスト";
+    $("score").textContent=`${Math.round(p*100)}%`;
+    $("scoreCap").textContent=`${n}問中 ○${ok}・△${results.filter(r=>r.g===1).length}・×${results.filter(r=>r.g===0).length}（△は0.5点）`;
+    $("estimate").innerHTML=`全${N}字のうち、およそ <b>${Math.round(p*N)}字</b> が書けそう<small>${n}問からの推定なので、実際は${Math.round(lo*N)}〜${Math.round(hi*N)}字くらいの幅があります。まちがえた字は復習に回しました。</small>`;
+    (tests[cat]=tests[cat]||[]).push({t:Date.now(),p:+p.toFixed(3),n});if(tests[cat].length>30)tests[cat].shift();saveTests();
+  }
   const mk=["×","△","○"],col=["var(--muted)","var(--amber)","var(--shu)"];
   $("reslist").innerHTML=results.map(r=>`<li><span class="mk" style="color:${col[r.g]}">${mk[r.g]}</span><span class="w">${r.w.k?r.s.replace("＿",r.w.a):r.w.a}</span><span class="r">${r.rd}</span></li>`).join("");
   show("result");
